@@ -34,27 +34,37 @@ class Cola {
 
     // Si alcanzamos el tamaño máximo, desencolar el primero
     if (this.size >= this.maxSize) {
-      this.desencolar();
+      this.removeRear();
     }
 
     // Agregar al final
-    this.rear.next = nuevo;
-    this.rear = nuevo;
+    nuevo.next = this.front;
+    this.front = nuevo;
     this.size++;
   }
 
-  desencolar() {
-    if (this.front === null) return null;
+  removerRear() {
+    if (!this.front) return null;
 
-    const temp = this.front;
-    this.front = this.front.next;
-
-    if (this.front === null) {
-      this.rear = null;
+    // Si solo hay un nodo
+    if (this.front === this.rear) {
+      const data = this.rear.data;
+      this.front = this.rear = null;
+      this.size = 0;
+      return data;
     }
 
+    // Buscar el penúltimo nodo
+    let actual = this.front;
+    while (actual.next !== this.rear) {
+      actual = actual.next;
+    }
+
+    const data = this.rear.data;
+    actual.next = null;
+    this.rear = actual;
     this.size--;
-    return temp.data;
+    return data;
   }
 
   recorrer() {
