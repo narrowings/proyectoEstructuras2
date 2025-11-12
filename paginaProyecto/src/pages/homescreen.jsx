@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getAuth, signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import { getFirestore, collection, addDoc, query, where, getDocs } from "firebase/firestore";
+import { getFirestore, collection, addDoc, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
 import "../styles/homescreen.css";
 
 // ============================
@@ -34,13 +34,27 @@ class Cola {
 
     // Si alcanzamos el tamaño máximo, desencolar el primero
     if (this.size >= this.maxSize) {
-      this.removeRear();
+      this.removerRear();
     }
 
     // Agregar al final
     nuevo.next = this.front;
     this.front = nuevo;
     this.size++;
+  }
+
+  desencolar() {
+    if (this.front === null) return null;
+
+    const temp = this.front;
+    this.front = this.front.next;
+
+    if (this.front === null) {
+      this.rear = null;
+    }
+
+    this.size--;
+    return temp.data;
   }
 
   removerRear() {
@@ -194,6 +208,7 @@ const HomeScreen = () => {
   const [mostrarHistorial, setMostrarHistorial] = useState(false);
   const [colaBusquedas] = useState(new Cola(10)); // Cola con máximo 10 elementos
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  const [actualizarHistorial, setActualizarHistorial] = useState(0); // Para forzar re-render
   const navigate = useNavigate();
   const auth = getAuth();
   const db = getFirestore();
@@ -336,6 +351,62 @@ const HomeScreen = () => {
   };
 
   // ======================
+  // Eliminar última búsqueda (la más reciente)
+  // ======================
+  const eliminarUltimaBusqueda = async () => {
+    if (colaBusquedas.estaVacia()) {
+      alert("No hay búsquedas para eliminar");
+      return;
+    }
+
+    const usuario = auth.currentUser;
+    if (!usuario) {
+      alert("Debes estar autenticado");
+      return;
+    }
+
+    try {
+      // Desencolar (elimina del frente, que es la más reciente)
+      const busquedaEliminada = colaBusquedas.desencolar();
+      
+      if (!busquedaEliminada) {
+        alert("No se pudo eliminar la búsqueda");
+        return;
+      }
+
+      console.log("🗑️ Eliminando búsqueda:", busquedaEliminada.texto);
+
+      // Buscar y eliminar de Firebase
+      const q = query(
+        collection(db, "busquedas"),
+        where("usuario", "==", usuario.uid),
+        where("texto", "==", busquedaEliminada.texto),
+        where("fecha", "==", busquedaEliminada.fecha)
+      );
+
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        // Eliminar el primer documento que coincida
+        const docToDelete = querySnapshot.docs[0];
+        await deleteDoc(doc(db, "busquedas", docToDelete.id));
+        console.log("✅ Búsqueda eliminada de Firebase");
+      } else {
+        console.log("⚠️ No se encontró el documento en Firebase");
+      }
+
+      // Forzar actualización de la UI
+      setActualizarHistorial(prev => prev + 1);
+      
+      alert(`Búsqueda "${busquedaEliminada.texto}" eliminada exitosamente`);
+
+    } catch (error) {
+      console.error("❌ Error eliminando búsqueda:", error);
+      alert("Error al eliminar la búsqueda: " + error.message);
+    }
+  };
+
+  // ======================
   // Mostrar historial
   // ======================
   const verHistorial = async () => {
@@ -413,6 +484,20 @@ const HomeScreen = () => {
         <div className="modalHistorial">
           <div className="modalContent">
             <h3>🔍 Búsquedas recientes</h3>
+            
+            {/* Botón para eliminar última búsqueda */}
+            {busquedasRecientes.length > 0 && (
+              <div className="accionesHistorial">
+                <button 
+                  className="btnEliminarUltima"
+                  onClick={eliminarUltimaBusqueda}
+                  disabled={cargandoHistorial}
+                >
+                  🗑️ Eliminar última búsqueda
+                </button>
+              </div>
+            )}
+            
             <p className="infoText">
               Total de búsquedas en cola: {busquedasRecientes.length}
             </p>
